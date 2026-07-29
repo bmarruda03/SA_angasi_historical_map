@@ -5,7 +5,7 @@ An interactive map of 142 recorded occurrences of *Ostrea angasi*, *Pinna bicolo
 Australian west coast — the assemblages that, by the mid-twentieth century, had almost
 entirely gone.
 
-**Live map:** https://bmarruda03.github.io/REPO-NAME/
+**Live map:** https://bmarruda03.github.io/SA_angasi_historical_map/
 
 *(Replace `REPO-NAME` above once GitHub Pages is enabled.)*
 
