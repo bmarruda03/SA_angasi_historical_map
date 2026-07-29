@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gulf Beds — panel &amp; encoding prototype (v3)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+    <style>
+      :root {
+        --ink: #111827; --ink-mid: #374151; --muted: #6b7280;
+        --line: #e5e7eb; --surface: #fff; --bg: #f9fafb;
+        --ocean: #0e4d64; --ocean-mid: #1a6e8e; --ocean-light: #ebf4f7;
+        --sand: #f5edd8;
+        --present: #16a34a; --uncertain: #d97706; --absent: #9ca3af;
+        --historic: #8a6a3d; --invasive: #b91c1c;
+        --gold: #eab308;
+        --handle-h: 46px;            /* [ADDED] mobile sheet grab-bar height */
+      }
+      * { box-sizing: border-box; }
+      /* [CHANGED] body is now the containing block and uses dvh, so the map
+         tracks the *visible* viewport when iOS Safari's toolbars slide away. */
+      html { height: 100%; }
+      body {
+        margin: 0; position: relative; height: 100dvh; overflow: hidden;
+        font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+      }
+      @supports not (height: 1dvh) { body { height: 100vh; } }
+      #map { position: absolute; inset: 0 0 0 0; background: #dfe9ec; }
+
+      /* ── Panel ─────────────────────────────────────────────── */
+      #panel {
+        position: absolute; top: 12px; left: 12px; bottom: 12px; width: 306px; z-index: 1200;
+        background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+        box-shadow: 0 6px 28px -12px rgba(0,0,0,.35);
+        display: flex; flex-direction: column; overflow: hidden;
+      }
+
+      /* ── [ADDED] Bottom-sheet grab bar — mobile only ──────────
+         Hidden on desktop. On phones it is the only part of the panel
+         visible when collapsed, and it is the expand/collapse control. */
+      #sheet-handle {
+        display: none; position: relative; align-items: center; gap: 10px;
+        width: 100%; height: var(--handle-h); padding: 6px 14px 0;
+        border: 0; background: var(--ocean); color: #fff; font: inherit;
+        text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+      }
+      #sheet-handle .sh-grip {
+        position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+        width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.45);
+      }
+      #sheet-handle .sh-t {
+        flex: 1; min-width: 0; font-size: 12.5px; font-weight: 650;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #sheet-handle .sh-c { flex: none; transition: transform .2s ease; }
+      #panel[data-collapsed="false"] #sheet-handle .sh-c { transform: rotate(180deg); }
+      .p-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--ocean); color: #fff; }
+      .p-head h1 { font-size: 13px; margin: 0; letter-spacing: .02em; font-weight: 650; }
+      .p-head p { margin: 3px 0 0; font-size: 10.5px; opacity: .82; line-height: 1.35; }
+      .p-body { overflow-y: auto; flex: 1; padding: 4px 0 8px; }
+
+      .grp { border-bottom: 1px solid var(--line); padding: 11px 14px 12px; }
+      .grp:last-child { border-bottom: 0; }
+      .grp-t {
+        font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+        color: var(--muted); font-weight: 700; margin-bottom: 9px;
+      }
+
+      /* Species lens — the primary control */
+      .lens { display: flex; flex-wrap: wrap; gap: 5px; }
+      .chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        border: 1px solid var(--line); background: var(--bg); color: var(--ink-mid);
+        border-radius: 999px; padding: 4px 9px 4px 6px; font-size: 11px; cursor: pointer;
+        font-style: italic; transition: .12s;
+      }
+      .chip svg { width: 14px; height: 14px; flex: none; }
+      .chip.plain { font-style: normal; }
+      .chip:hover { border-color: var(--ocean-mid); }
+      .chip[aria-pressed="true"] { background: var(--ocean); border-color: var(--ocean); color: #fff; }
+      .chip.inv[aria-pressed="true"] { background: var(--invasive); border-color: var(--invasive); }
+      .lens-note { font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+
+      /* Evidence arc */
+      .row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+      .row input { margin: 2px 0 0; accent-color: var(--ocean); flex: none; }
+      .row label { font-size: 12px; line-height: 1.35; cursor: pointer; flex: 1; }
+      .row .n { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+      .row .sub { display: block; font-size: 10px; color: var(--muted); font-style: normal; }
+      .stage-i {
+        font-size: 9px; font-weight: 700; color: var(--ocean-mid);
+        border: 1px solid var(--ocean-light); background: var(--ocean-light);
+        border-radius: 3px; padding: 1px 4px; margin-right: 5px;
+      }
+      .disc { background: none; border: 0; color: var(--ocean-mid); font-size: 10px; cursor: pointer; padding: 2px 0 0 26px; text-decoration: underline; }
+      .kids { padding: 2px 0 4px 26px; display: none; }
+      .kids.open { display: block; }
+      .kids .row { padding: 3px 0; }
+      .kids .row label { font-size: 11px; color: var(--ink-mid); }
+
+      /* Legend */
+      .legend { padding: 11px 14px 13px; border-top: 1px solid var(--line); background: var(--bg); }
+      .lg-row { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--ink-mid); padding: 2.5px 0; }
+      .sw { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 1.5px solid rgba(0,0,0,.28); }
+
+      .zoomout { position: absolute; right: 12px; bottom: 12px; z-index: 1100;
+        background: rgba(17,24,39,.82); color: #fff; font-size: 10.5px; padding: 5px 9px;
+        border-radius: 5px; font-variant-numeric: tabular-nums; }
+      .basemap { position: absolute; right: 12px; top: 12px; z-index: 1100; display: flex;
+        background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+      .basemap button { border: 0; background: none; font-size: 11px; padding: 6px 10px; cursor: pointer; color: var(--ink-mid); }
+      .basemap button.on { background: var(--ocean); color: #fff; }
+      .leaflet-container { font-family: inherit; }
+      .pop b { font-size: 12px; } .pop { font-size: 11.5px; line-height: 1.45; }
+      .pop .meta { color: var(--muted); font-size: 10.5px; }
+      /* ══════════════════════════════════════════════════════════════════
+         [REPLACED] Mobile breakpoint.
+         Was: #panel { width:auto; right:12px; bottom:auto; max-height:62% }
+         which kept top:12px/left:12px from the base rule and so pinned a
+         full-width slab over the top 62% of the screen — on top of the
+         basemap toggle and the zoom control, and covering the map.
+         Now: the panel becomes a bottom sheet, collapsed by default.
+         ══════════════════════════════════════════════════════════════════ */
+      @media (max-width: 720px) {
+        #panel {
+          top: auto; left: 0; right: 0; bottom: 0; width: auto;
+          height: min(78dvh, 560px); max-height: 78dvh;
+          border-radius: 14px 14px 0 0;
+          border-left: 0; border-right: 0; border-bottom: 0;
+          box-shadow: 0 -6px 24px -10px rgba(0,0,0,.4);
+          transition: transform .22s ease;
+        }
+        @supports not (height: 1dvh) { #panel { height: min(78vh, 560px); max-height: 78vh; } }
+
+        /* Collapsed = slid down until only the grab bar shows. */
+        #panel[data-collapsed="true"] { transform: translateY(calc(100% - var(--handle-h))); }
+
+        #sheet-handle { display: flex; }
+        .p-head { display: none; }          /* title now lives in the grab bar */
+
+        /* Scroll inside the sheet, never scroll the page behind it. */
+        .p-body {
+          overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+          touch-action: pan-y; padding-bottom: 14px;
+        }
+
+        /* Touch-sized targets (was ~22px tall — below the 44px guidance). */
+        .chip { font-size: 12px; padding: 7px 12px 7px 9px; }
+        .chip svg { width: 15px; height: 15px; }
+        .row { padding: 7px 0; }
+        .row input { width: 18px; height: 18px; }
+        .row label { font-size: 12.5px; }
+        .disc { font-size: 11px; padding: 4px 0 2px 26px; }
+        .basemap button { padding: 8px 9px; }
+
+        /* Legend in two columns so seven rows don't eat the sheet. */
+        .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 10px; padding: 10px 14px 12px; }
+        .legend > .grp-t, .legend > .lg-row:last-child { grid-column: 1 / -1; }
+
+        /* Keep map chrome clear of the collapsed sheet. */
+        .zoomout { left: 12px; right: auto; bottom: calc(var(--handle-h) + 10px); }
+        .leaflet-bottom { bottom: calc(var(--handle-h) + 4px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="basemap">
+      <button data-bm="sat" class="on">Satellite</button>
+      <button data-bm="ocean">Bathymetry</button>
+      <button data-bm="osm">Structures</button>
+    </div>
+    <div class="zoomout">zoom <span id="zlev">6</span> · <span id="znote">—</span></div>
+
+    <div id="panel" data-collapsed="true">
+      <!-- [ADDED] mobile grab bar; display:none on desktop -->
+      <button id="sheet-handle" type="button" aria-expanded="false" aria-controls="panel-body">
+        <span class="sh-grip"></span>
+        <span class="sh-t">Gulf Beds — filters &amp; legend</span>
+        <svg class="sh-c" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.4" aria-hidden="true">
+          <path d="M6 15l6-6 6 6" />
+        </svg>
+      </button>
+      <div class="p-head">
+        <h1>Gulf Beds — Shellbed Atlas</h1>
+        <p>Prototype: species-as-filter panel and revised marker encoding.</p>
+      </div>
+      <div class="p-body" id="panel-body">
+
+        <div class="grp">
+          <div class="grp-t">Species lens</div>
+          <div class="lens" id="lens"></div>
+          <div class="lens-note" id="lensnote"></div>
+        </div>
+
+        <div class="grp">
+          <div class="grp-t">Evidence</div>
+          <div id="arc"></div>
+        </div>
+
+        <div class="grp">
+          <div class="grp-t">Context</div>
+          <div id="ctx"></div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="grp-t" style="margin-bottom:7px">Legend</div>
+        <div class="lg-row"><span class="sw" style="background:var(--present)"></span> Present — confirmed in water</div>
+        <div class="lg-row"><span class="sw" style="background:var(--uncertain)"></span> Uncertain — indirect evidence</div>
+        <div class="lg-row"><span class="sw" style="background:var(--absent)"></span> Absent — surveyed, not found</div>
+        <div class="lg-row"><span class="sw" style="background:var(--historic)"></span> Historic record</div>
+        <div class="lg-row"><span class="sw" style="background:var(--invasive)"></span> Non-native</div>
+        <div class="lg-row"><span class="sw" style="background:#fff;box-shadow:0 0 0 2.5px var(--gold)"></span> Recruitment confirmed</div>
+        <div class="lg-row" style="margin-top:5px;color:var(--muted)">Shape = species · fill = status · ring = recruitment</div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+    <script src="data.js"></script>
+    <script>
+    /* ══════════════════════════════════════════════════════════════════
+       1. SPECIES REGISTRY — single source of truth.
+          Adding a species = adding one object here. Nothing else changes:
+          the lens, the legend, the filters and the popups all read from it.
+          This replaces the current split between SPECIES_LABELS,
+          SPECIES_SHAPES, SPECIES_SVG_COLORS and the per-layer key names.
+       ══════════════════════════════════════════════════════════════════ */
+    const SPECIES = {
+      angasi:       { label:"Ostrea angasi",        role:"builder",  tier:1, origin:"native",
+                      path:"M13 3C7 3 3 7 3 13c0 5 4 10 11 10 6 0 9-5 9-11 0-6-4-9-10-9Z" },
+      hammerOyster: { label:"Malleus meridianus",   role:"builder",  tier:1, origin:"native",
+                      path:"M4 6c0-1 18-1 18 0s-6 2-7 4c-1 2 0 10-1 13-1 1-3 1-3 0-1-3 0-11-1-13S4 7 4 6Z" },
+      razorfish:    { label:"Pinna dolabrata",      role:"builder",  tier:1, origin:"native",
+                      path:"M4 4c6 1 13 2 18 4-2 6-6 11-9 16-3-5-7-10-9-20Z" },
+      cockle:       { label:"Katelysia spp.",       role:"assoc",    tier:2, origin:"native",
+                      path:"M13 5C5 5 3 10 3 15c0 6 5 8 10 8s10-2 10-8c0-5-2-10-10-10Z" },
+      scallop:      { label:"Equichlamys bifrons",  role:"assoc",    tier:2, origin:"native",
+                      path:"M13 22H9v-2C4 18 2 13 2 9c0-5 5-6 11-6s11 1 11 6c0 4-2 9-7 11v2Z" },
+      nativeMussel: { label:"Mytilidae — unresolved", role:"assoc",  tier:2, origin:"unresolved",
+                      path:"M5 6s4-2 9 0 8 6 8 10c0 5-5 7-9 6C8 21 5 15 5 6Z" },
+      /* ── New. Declared here only; no data wired yet. ── */
+      pacificOyster:{ label:"Magallana gigas",      role:"builder",  tier:3, origin:"introduced",
+                      path:"M6 4c5-1 12 1 14 6 2 6-2 13-8 13-5 0-9-4-9-9 0-4 1-8 3-10Z" },
+      blueMussel:   { label:"Mytilus galloprovincialis", role:"builder", tier:3, origin:"contested",
+                      path:"M4 5s5-1 10 2 8 7 8 11c0 4-4 6-8 4C8 20 4 13 4 5Z" }
+    };
+
+    const STATUS_FILL = { present:"var(--present)", uncertain:"var(--uncertain)",
+                          absent:"var(--absent)", historic:"var(--historic)",
+                          invasive:"var(--invasive)", restoration:"var(--ocean)" };
+
+    /* ══════════════════════════════════════════════════════════════════
+       2. BASEMAPS — the zoom-failure fix.
+          maxNativeZoom tells Leaflet the deepest zoom the *provider* has.
+          Past that it upscales existing tiles instead of requesting tiles
+          that don't exist (which is what produced blank/grey panels).
+       ══════════════════════════════════════════════════════════════════ */
+    const map = L.map("map", { zoomControl: true, maxZoom: 21 }).setView([-33.9,136.4], 7);
+
+    const BASES = {
+      sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { attribution:"Tiles &copy; Esri", maxNativeZoom:18, maxZoom:21 }),
+      ocean: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+        { attribution:"Tiles &copy; Esri — GEBCO, NOAA", maxNativeZoom:13, maxZoom:21 }),
+      osm: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { attribution:"&copy; OpenStreetMap contributors", maxNativeZoom:19, maxZoom:21 })
+    };
+    const LABELS = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        { maxNativeZoom:12, maxZoom:21, opacity:.9 });
+
+    let activeBase = BASES.sat.addTo(map);
+    LABELS.addTo(map);
+    document.querySelectorAll(".basemap button").forEach(b => b.onclick = () => {
+      map.removeLayer(activeBase);
+      activeBase = BASES[b.dataset.bm].addTo(map);
+      if (b.dataset.bm === "osm") map.removeLayer(LABELS); else LABELS.addTo(map);
+      document.querySelectorAll(".basemap button").forEach(x => x.classList.toggle("on", x === b));
+    });
+
+    const zlev = document.getElementById("zlev"), znote = document.getElementById("znote");
+    function zoomReadout() {
+      const z = map.getZoom(); zlev.textContent = z;
+      const nat = activeBase.options.maxNativeZoom;
+      znote.textContent = z > nat ? `upscaled from z${nat}` : "native tiles";
+    }
+    map.on("zoomend", zoomReadout); zoomReadout();
+
+    /* ══════════════════════════════════════════════════════════════════
+       3. MARKER ENCODING — two channels, not five.
+          shape = species · fill = status · one ring = recruitment.
+          Sanctuary/control and verified/pending move into the popup.
+       ══════════════════════════════════════════════════════════════════ */
+    function icon(spKey, status, opts = {}) {
+      const s = SPECIES[spKey], sz = opts.size || 26;
+      const fill = STATUS_FILL[status] || "var(--muted)";
+      const ring = opts.recruitment
+        ? `<circle cx="13" cy="13" r="12" fill="none" stroke="var(--gold)" stroke-width="2.5"/>` : "";
+      const body = s
+        ? `<path d="${s.path}" fill="${fill}" stroke="rgba(0,0,0,.45)" stroke-width="1.1"/>`
+        : `<circle cx="13" cy="13" r="6" fill="${fill}" stroke="rgba(0,0,0,.45)" stroke-width="1.1"/>`;
+      return L.divIcon({
+        className: "", iconSize: [sz, sz], iconAnchor: [sz/2, sz/2],
+        html: `<svg viewBox="0 0 26 26" width="${sz}" height="${sz}" style="opacity:${opts.dim?0.5:1}">${ring}${body}</svg>`
+      });
+    }
+    function chipSvg(k) {
+      const s = SPECIES[k];
+      return `<svg viewBox="0 0 26 26"><path d="${s.path}" fill="currentColor" opacity=".85"/></svg>`;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       4. STATE + LAYERS
+       ══════════════════════════════════════════════════════════════════ */
+    const state = { lens: "angasi", stages: new Set(["s1","s2"]), ctx: new Set() };
+    const groups = {
+      s1: L.layerGroup(), s2: L.layerGroup(),
+      s3: L.layerGroup(), s4: L.markerClusterGroup({ maxClusterRadius: 45, disableClusteringAtZoom: 15 })
+    };
+
+    const pop = (t, sub, meta) =>
+      `<div class="pop"><b>${t}</b>${sub?`<div>${sub}</div>`:""}${meta?`<div class="meta">${meta}</div>`:""}</div>`;
+
+    function build() {
+      Object.values(groups).forEach(g => g.clearLayers());
+      const L1 = state.lens, all = L1 === "all";
+
+      // Stage 1 — historic
+      ATLAS.hist.forEach(h => {
+        const spp = all ? h.sp : h.sp.filter(s => s === L1);
+        if (!spp.length) return;
+        L.marker([h.lat, h.lng], { icon: icon(spp[0], "historic", { size: 22, dim: true }) })
+          .bindPopup(pop(h.n, spp.map(s => `<i>${SPECIES[s].label}</i>`).join(", "),
+            `Martin et al. 2025 · ${h.reg}${h.area?` · ${h.area} ha`:""}${h.multi?" · multi-species record":""}`))
+          .addTo(groups.s1);
+      });
+
+      // Stage 2 — field surveys + Lindsey
+      ATLAS.field.forEach(f => {
+        const keys = all ? Object.keys(f.sp) : (f.sp[L1] ? [L1] : []);
+        if (!keys.length) return;
+        const e = f.sp[keys[0]];
+        L.marker([f.lat, f.lng], { icon: icon(keys[0], e.st, { recruitment: e.rec === "yes" }) })
+          .bindPopup(pop(f.n,
+            keys.map(k => `<i>${SPECIES[k].label}</i> — ${f.sp[k].st}`).join("<br>"),
+            `Eyrelab field survey 2026 · ${e.m.replace(/_/g," ")}${e.no?`<br>${e.no}`:""}`))
+          .addTo(groups.s2);
+      });
+      if (all || L1 === "angasi") ATLAS.lind.forEach(l => {
+        L.marker([l.lat, l.lng], { icon: icon("angasi", "present", { recruitment: true, size: 22 }) })
+          .bindPopup(pop(l.n, `<i>Ostrea angasi</i> — recruitment confirmed`,
+            `Lindsey et al. 2026 · ${l.zone}<br>${l.no}`)).addTo(groups.s2);
+      });
+
+      // Stage 3 — restoration
+      if (all || L1 === "angasi") ATLAS.reef.forEach(r => {
+        L.marker([r.lat, r.lng], { icon: icon("angasi", "restoration", { size: 24 }) })
+          .bindPopup(pop(r.n, r.prog === "eyrelab" ? "Eyrelab — 25 Reefs" : "SA Government / TNC",
+            r.no)).addTo(groups.s3);
+      });
+
+      // Stage 4 — community science
+      Object.entries(ATLAS.inat).forEach(([k, arr]) => {
+        if (!all && k !== L1) return;
+        arr.forEach(([lat, lng, id, d, obs]) => {
+          L.marker([lat, lng], { icon: icon(k, "present", { size: 20 }) })
+            .bindPopup(pop(SPECIES[k].label,
+              `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6)} · ${obs}`,
+              `iNaturalist · "Alive" annotation<br><a href="https://www.inaturalist.org/observations/${id}" target="_blank" rel="noopener">View observation</a>`))
+            .addTo(groups.s4);
+        });
+      });
+
+      Object.entries(groups).forEach(([k, g]) =>
+        state.stages.has(k) ? g.addTo(map) : map.removeLayer(g));
+      counts();
+    }
+
+    function counts() {
+      const n = { s1:0, s2:0, s3:0, s4:0 };
+      Object.entries(groups).forEach(([k, g]) => n[k] = g.getLayers().length);
+      Object.entries(n).forEach(([k, v]) => {
+        const el = document.querySelector(`[data-n="${k}"]`); if (el) el.textContent = v;
+      });
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       5. PANEL — 8 controls, built from the registry
+       ══════════════════════════════════════════════════════════════════ */
+    const lensEl = document.getElementById("lens");
+    function drawLens() {
+      const order = ["all", ...Object.keys(SPECIES)];
+      lensEl.innerHTML = order.map(k => {
+        if (k === "all") return `<button class="chip plain" data-sp="all" aria-pressed="${state.lens==="all"}">All species</button>`;
+        const s = SPECIES[k], inv = s.origin === "introduced" || s.origin === "contested";
+        return `<button class="chip${inv?" inv":""}" data-sp="${k}" aria-pressed="${state.lens===k}">${chipSvg(k)}${s.label}</button>`;
+      }).join("");
+      lensEl.querySelectorAll("button").forEach(b => b.onclick = () => {
+        state.lens = b.dataset.sp; drawLens(); build();
+      });
+      const s = SPECIES[state.lens];
+      document.getElementById("lensnote").textContent = state.lens === "all"
+        ? "All species shown. Shapes overlap at this density — pick one species to read the map cleanly."
+        : `${s.role === "builder" ? "Reef-building" : "Associated"} · ${s.origin}` +
+          (s.tier === 3 ? " · no data wired yet — registry entry only" : "");
+    }
+
+    const ARC = [
+      { k:"s1", i:"1", t:"Historical record",   sub:"Martin et al. 2025 · Gillies et al. 2018",
+        kids:["Martin et al. 2025 — reef sites","Gillies et al. 2018 — harvest, aquaculture, place names"] },
+      { k:"s2", i:"2", t:"Modern presence",     sub:"Eyrelab field surveys · Lindsey et al. 2026",
+        kids:["Eyrelab field surveys 2026","Lindsey et al. 2026 — Coffin Bay recruitment"] },
+      { k:"s3", i:"3", t:"Active restoration",  sub:"Eyrelab 25 Reefs · SA Gov / TNC",
+        kids:["Eyrelab — 25 Reefs","SA Government / The Nature Conservancy"] },
+      { k:"s4", i:"4", t:"Community science",   sub:"iNaturalist, \u201cAlive\u201d annotated",
+        kids:["iNaturalist observations","Community sightings (submitted)"] }
+    ];
+    document.getElementById("arc").innerHTML = ARC.map(a => `
+      <div class="row">
+        <input type="checkbox" id="cb-${a.k}" ${state.stages.has(a.k)?"checked":""}>
+        <label for="cb-${a.k}"><span class="stage-i">${a.i}</span>${a.t}<span class="sub">${a.sub}</span></label>
+        <span class="n" data-n="${a.k}">0</span>
+      </div>
+      <button class="disc" data-t="${a.k}">sources</button>
+      <div class="kids" id="k-${a.k}">${a.kids.map((c,j)=>`
+        <div class="row"><input type="checkbox" id="k${a.k}${j}" checked><label for="k${a.k}${j}">${c}</label></div>`).join("")}</div>
+    `).join("");
+    document.querySelectorAll(".disc").forEach(b => b.onclick = () =>
+      document.getElementById("k-"+b.dataset.t).classList.toggle("open"));
+    ARC.forEach(a => document.getElementById("cb-"+a.k).onchange = e => {
+      e.target.checked ? state.stages.add(a.k) : state.stages.delete(a.k);
+      e.target.checked ? groups[a.k].addTo(map) : map.removeLayer(groups[a.k]);
+    });
+
+    document.getElementById("ctx").innerHTML = [
+      ["Marine parks","Outer boundaries only — no internal zoning"],
+      ["Aquaculture leases","PIRSA — 601 oyster, 68 mussel"],
+      ["Pressures — non-native bivalves","Registry declared; data not yet collected"],
+      ["Reference — habitat &amp; seabed","Seamap Australia · AusSeabed (WMS)"]
+    ].map(([t,s],i)=>`
+      <div class="row"><input type="checkbox" id="c${i}" disabled>
+        <label for="c${i}">${t}<span class="sub">${s}</span></label></div>`).join("");
+
+    /* ══════════════════════════════════════════════════════════════════
+       6. RESPONSIVE  [ADDED]
+          Three separate jobs:
+          a) sheet toggle       — collapse/expand on phones
+          b) invalidateSize     — Leaflet caches container size; if the box
+                                  changes (rotation, iframe resize, sheet
+                                  toggle) it must be told, or tiles and
+                                  click targets land in the wrong place
+          c) fitBounds          — replaces setView([-33.9,136.4], 7). A zoom
+                                  tuned on a wide desktop canvas shows far
+                                  less on a 390px-wide phone; fitting the
+                                  data means both get full coverage.
+       ══════════════════════════════════════════════════════════════════ */
+    const panelEl  = document.getElementById("panel");
+    const handleEl = document.getElementById("sheet-handle");
+    const mq = window.matchMedia("(max-width: 720px)");
+
+    // How much of the map is currently obscured at the bottom (mobile) or left (desktop).
+    function occluded() {
+      if (!mq.matches) return { paddingTopLeft: [panelEl.offsetWidth + 24, 24], paddingBottomRight: [24, 24] };
+      const h = panelEl.dataset.collapsed === "true" ? handleEl.offsetHeight : panelEl.offsetHeight;
+      return { paddingTopLeft: [22, 22], paddingBottomRight: [22, h + 22] };
+    }
+
+    // Bounds of whatever is actually switched on, read off the layers themselves
+    // so this stays correct regardless of ATLAS's shape.
+    function dataBounds() {
+      const b = L.latLngBounds([]);
+      Object.entries(groups).forEach(([k, g]) => {
+        if (!state.stages.has(k)) return;
+        g.getLayers().forEach(l => { if (l.getLatLng) b.extend(l.getLatLng()); });
+      });
+      return b.isValid() ? b : null;
+    }
+    function fitData() {
+      const b = dataBounds();
+      if (!b) return;                                  // no points -> keep default view
+      map.fitBounds(b, Object.assign({ maxZoom: 11 }, occluded()));
+    }
+
+    function setSheet(collapsed) {
+      panelEl.dataset.collapsed = collapsed ? "true" : "false";
+      handleEl.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      setTimeout(() => map.invalidateSize({ animate: false }), 260);   // after the transition
+    }
+    handleEl.addEventListener("click", () => setSheet(panelEl.dataset.collapsed !== "true"));
+
+    // Collapsed on phones: a visitor should see the map first, not a wall of filters.
+    setSheet(mq.matches);
+    mq.addEventListener("change", e => setSheet(e.matches));
+
+    // Re-measure on any container change. Deliberately does NOT re-fit the
+    // bounds — that would yank the view out from under someone mid-pan.
+    let rzT;
+    new ResizeObserver(() => {
+      clearTimeout(rzT);
+      rzT = setTimeout(() => map.invalidateSize({ animate: false }), 120);
+    }).observe(document.getElementById("map"));
+
+    drawLens(); build();
+    fitData();                     // [ADDED] initial framing from the data
+    </script>
+  </body>
+</html>
