@@ -19,9 +19,7 @@ Every mapped point is reproduced from the supplementary dataset (`mmc2`) and Fig
 > PII S0964-5691(25)00002-X.
 
 That paper is open access under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The data are reused here with
-attribution, as the licence requires. **The attribution and licence statement in the map's
-sources panel must not be removed.**
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). 
 
 Historical, legislative and national context presented alongside the data:
 
