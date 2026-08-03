@@ -1,4 +1,4 @@
-# South Australia's historical shellfish ecosystems
+# Historic Shellbed Atlas of South Australia
 
 An interactive map of 142 recorded occurrences of *Ostrea angasi*, *Pinna bicolor* and
 *Malleus meridianus* ecosystems across Spencer Gulf, Gulf St Vincent and the South
@@ -6,10 +6,6 @@ Australian west coast — the assemblages that, by the mid-twentieth century, ha
 entirely gone.
 
 **Live map:** https://bmarruda03.github.io/SA_angasi_historical_map/
-
-*(Replace `REPO-NAME` above once GitHub Pages is enabled.)*
-
-Produced in support of the essay *South Australia, the Oyster State*.
 
 ---
 
@@ -38,14 +34,6 @@ Historical, legislative and national context presented alongside the data:
 > Russell, K., Sheaves, M. & Warnock, B. (2018). Australian shellfish ecosystems:
 > Past distribution, current status and future direction. *PLOS ONE* 13(2): e0190914.
 > doi:10.1371/journal.pone.0190914
-
-### Outstanding
-
-- The Martin et al. (2025) citation still needs its **volume and article number**, marked
-  in grey in the map's sources panel. Edit the `SOURCES` object in `index.html`.
-- The **67 → 0** figure sometimes attributed to Gillies et al. (2018) has not been traced
-  to a specific figure or table in that paper. Verify before citing it, or restate it as a
-  derivation from their dataset.
 
 ---
 
@@ -92,16 +80,12 @@ Also listed under *Data handling caveats* in the map itself.
 - **Do not sum `area_km2`.** Three values recur across multiple records (25.719, 29.008 and
   36.001 km²), which suggests one digitised polygon assigned to several records. Most area
   values describe lease or closure boundaries, not measured reef footprints.
-- **Dates are parsed from label text**, not from a dedicated date field. Era filtering is
-  indicative. 141 of 142 labels contain exactly one four-digit year; one is undated.
 - **Eleven records carry coordinates rounded to two decimal places** (≈1 km or coarser).
   All eleven are the 1981 survey records, which suggests coarse digitisation from a
   published figure. Each is flagged in its popup and in `coord_precision_flag`.
 - **Site labels have been normalised** for capitalisation and obvious spelling
   (e.g. Hardwhicke → Hardwicke; Smokey → Smoky). No coordinate, taxon, confidence or area
   value has been altered.
-- **Region assignment follows the source.** Encounter Bay, Middleton and Port Elliot
-  records are binned to Gulf St Vincent although they sit outside it.
 
 ---
 
@@ -118,17 +102,6 @@ One variable per visual channel:
 
 True-scale area circles are a separate toggle (*Estimated extent*), which is the only
 honest way to show extent given that just 27 of 142 records carry an area value.
-
----
-
-## Editing
-
-Both live near the top of the `<script>` block in `index.html`:
-
-- **Citations** — the `SOURCES` object is the single place they are defined.
-- **Per-record provenance** — if the source dataset carries an archival reference for a
-  record, add `"src": "SRSA GRG 45/1, 1885 lease register"` to that site object and the
-  popup will display it above the dataset citation.
 
 ---
 
